@@ -153,7 +153,7 @@ type IssueCommentEvent struct {
 }
 
 func (p *IssueCommentEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s commented on issue #%d\n\n%s", ev.Actor.Login, p.Issue.Number, p.Comment.Body)
+	return fmt.Sprintf("@%s commented on issue #%d\n\n%s\n\n%s", ev.Actor.Login, p.Issue.Number, ellipsis(p.Comment.Body, 5), p.Comment.HtmlUrl)
 }
 
 type IssuesEvent struct {
@@ -212,7 +212,7 @@ type PullRequestReviewCommentEvent struct {
 }
 
 func (p *PullRequestReviewCommentEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s commented on pull request #%d\n\n%s", ev.Actor.Login, p.PullRequest.Number, p.Comment.Body)
+	return fmt.Sprintf("@%s commented on pull request #%d\n\n%s\n\n%s", ev.Actor.Login, p.PullRequest.Number, ellipsis(p.Comment.Body, 5), p.Comment.HtmlUrl)
 }
 
 type GollumEvent struct {
@@ -277,4 +277,14 @@ type Page struct {
 	Action  string `json:"action"`
 	Sha     string `json:"sha"`
 	HtmlUrl string `json:"html_url"`
+}
+
+func ellipsis(str string, lines int) string {
+	l := strings.SplitN(str, "\n", lines+1)
+
+	if len(l) == lines+1 {
+		l[lines] = "..."
+	}
+
+	return strings.Join(l, "\n")
 }

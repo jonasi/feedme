@@ -3,7 +3,7 @@ package main
 import "log"
 
 func debugf(str string, params ...interface{}) {
-	if *debug {
+	if debug {
 		if str[len(str)-1] != '\n' {
 			str += "\n"
 		}
@@ -15,7 +15,7 @@ func debugf(str string, params ...interface{}) {
 }
 
 func warnf(str string, params ...interface{}) {
-	if *debug {
+	if debug {
 		if str[len(str)-1] != '\n' {
 			str += "\n"
 		}

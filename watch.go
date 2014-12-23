@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"strings"
 
 	"github.com/buger/goterm"
@@ -13,7 +14,9 @@ import (
 var (
 	configFile        string
 	defaultConfigFile = path.Join(os.Getenv("HOME"), ".config", "github-watch")
-	debug             = flag.Bool("debug", false, "")
+	debug             bool
+	count             int
+	tail              bool
 	orgs              = stringsl{}
 	users             = stringsl{}
 	userOrgs          = stringsl{}
@@ -22,6 +25,9 @@ var (
 
 func main() {
 	flag.StringVar(&configFile, "config", "", "")
+	flag.IntVar(&count, "n", 30, "")
+	flag.BoolVar(&debug, "debug", false, "")
+	flag.BoolVar(&tail, "f", false, "")
 	flag.Var(&orgs, "org", "")
 	flag.Var(&userOrgs, "user-org", "")
 	flag.Var(&repos, "repo", "")
@@ -55,45 +61,98 @@ func main() {
 	}
 
 	var (
-		ch       = make(chan *pollMsg)
-		watching = 0
+		ch      = make(chan *pollMsg)
+		urls    = []string{}
+		polling = map[string]int{}
 	)
 
 	for _, org := range orgs {
-		cl.pollEvents(fmt.Sprintf("/orgs/%s/events", org), ch)
-		watching++
+		urls = append(urls, fmt.Sprintf("/orgs/%s/events", org))
 	}
 
 	for _, org := range userOrgs {
-		cl.pollEvents(fmt.Sprintf("/users/%s/events/orgs/%s", u.Login, org), ch)
-		watching++
+		urls = append(urls, fmt.Sprintf("/users/%s/events/orgs/%s", u.Login, org))
 	}
 
 	for _, repo := range repos {
-		cl.pollEvents(fmt.Sprintf("/repos/%s/events", repo), ch)
-		watching++
+		urls = append(urls, fmt.Sprintf("/repos/%s/events", repo))
 	}
 
 	for _, u := range users {
-		cl.pollEvents(fmt.Sprintf("/users/%s/events", u), ch)
-		watching++
+		urls = append(urls, fmt.Sprintf("/users/%s/events", u))
 	}
 
-	if watching == 0 {
-		cl.pollEvents(fmt.Sprintf("/users/%s/received_events", u.Login), ch)
+	if len(urls) == 0 {
+		urls = append(urls, fmt.Sprintf("/users/%s/received_events", u.Login))
 	}
+
+	for _, u := range urls {
+		if _, ok := polling[u]; ok {
+			continue
+		}
+
+		polling[u] = 0
+		cl.pollEvents(u, count, ch)
+	}
+
+	var (
+		first  = false
+		events = events{}
+	)
 
 	for msg := range ch {
+		polling[msg.url]++
+
+		if !first {
+			first = true
+
+			for _, c := range polling {
+				if c == 0 {
+					first = false
+					break
+				}
+			}
+		}
+
 		if msg.err != nil {
 			fmt.Printf("Events load error: %s\n", msg.err)
 			continue
 		}
 
-		width := goterm.Width()
-		for i := len(msg.events) - 1; i >= 0; i-- {
-			ev := msg.events[i]
-			fmt.Println(strings.Repeat("-", width))
-			fmt.Println(ev.Summary())
+		events = append(events, msg.events...)
+
+		if first {
+			sort.Sort(events)
+
+			for _, ev := range events {
+				printEvent(&ev)
+			}
+
+			events = nil
+
+			if !tail {
+				os.Exit(0)
+			}
 		}
 	}
+}
+
+func printEvent(ev *Event) {
+	width := goterm.Width()
+	fmt.Println(strings.Repeat("-", width))
+	fmt.Println(ev.Summary())
+}
+
+type events []Event
+
+func (e events) Len() int {
+	return len(e)
+}
+
+func (e events) Less(i, j int) bool {
+	return e[i].CreatedAt.Before(e[j].CreatedAt)
+}
+
+func (e events) Swap(i, j int) {
+	e[i], e[j] = e[j], e[i]
 }

@@ -12,6 +12,7 @@ type client struct {
 }
 
 type pollMsg struct {
+	url    string
 	events []Event
 	err    error
 }
@@ -35,7 +36,7 @@ func (c *client) getUser() (*octokit.User, error) {
 	return u, nil
 }
 
-func (c *client) pollEvents(u string, send chan *pollMsg) {
+func (c *client) pollEvents(u string, count int, send chan *pollMsg) {
 	var (
 		etag   string
 		lastId string
@@ -46,20 +47,20 @@ func (c *client) pollEvents(u string, send chan *pollMsg) {
 
 	go func() {
 		for {
-			events, etag, poll, err = c.getEventsSince(u, etag, lastId)
+			events, etag, poll, err = c.getEventsSince(u, etag, lastId, count)
 
 			if len(events) > 0 {
 				lastId = events[0].Id
 			}
 
-			send <- &pollMsg{events, err}
+			send <- &pollMsg{u, events, err}
 
 			time.Sleep(time.Duration(poll) * time.Second)
 		}
 	}()
 }
 
-func (c *client) getEventsSince(u, etag, lastId string) ([]Event, string, int, error) {
+func (c *client) getEventsSince(u, etag, lastId string, count int) ([]Event, string, int, error) {
 	var (
 		events = []Event{}
 		ev     []Event
@@ -89,6 +90,11 @@ func (c *client) getEventsSince(u, etag, lastId string) ([]Event, string, int, e
 		}
 
 		events = append(events, ev...)
+
+		if len(events) >= count {
+			events = events[0:count]
+			break
+		}
 
 		if next == "" {
 			break
