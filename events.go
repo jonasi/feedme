@@ -101,6 +101,7 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 	case TypeDownloadEvent:
 	case TypeFollowEvent:
 	case TypeForkEvent:
+		e.Payload = &ForkEvent{}
 	case TypeForkApplyEvent:
 	case TypeGistEvent:
 	case TypeGollumEvent:
@@ -124,6 +125,7 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 	case TypeStatusEvent:
 	case TypeTeamAddEvent:
 	case TypeWatchEvent:
+		e.Payload = &WatchEvent{}
 	}
 
 	if e.Payload != nil {
@@ -228,6 +230,22 @@ type DeleteEvent struct {
 
 func (p *DeleteEvent) Summary(ev *Event) string {
 	return fmt.Sprintf("@%s deleted %s %s", ev.Actor.Login, p.RefType, p.Ref)
+}
+
+type WatchEvent struct {
+	Action string `json:"action"`
+}
+
+func (p *WatchEvent) Summary(ev *Event) string {
+	return fmt.Sprintf("@%s is now watching", ev.Actor.Login)
+}
+
+type ForkEvent struct {
+	Forkee octokit.Repository `json:"forkee"`
+}
+
+func (p *ForkEvent) Summary(ev *Event) string {
+	return fmt.Sprintf("@%s forked the repo at %s", ev.Actor.Login, p.Forkee.HTMLURL)
 }
 
 type Commit struct {
