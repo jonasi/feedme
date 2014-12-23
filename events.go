@@ -70,6 +70,7 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 	case TypeCreateEvent:
 		e.Payload = &CreateEvent{}
 	case TypeDeleteEvent:
+		e.Payload = &DeleteEvent{}
 	case TypeDeploymentEvent:
 	case TypeDeploymentStatusEvent:
 	case TypeDownloadEvent:
@@ -176,6 +177,15 @@ type GollumEvent struct {
 
 func (p *GollumEvent) Summary(ev *Event) string {
 	return fmt.Sprintf("@%s modified %d wiki pages", ev.Actor.Login, len(p.Pages))
+}
+
+type DeleteEvent struct {
+	RefType string `json:"ref_type"`
+	Ref     string `json:"ref"`
+}
+
+func (p *DeleteEvent) Summary(ev *Event) string {
+	return fmt.Sprintf("@%s deleted %s %s", ev.Actor.Login, p.RefType, p.Ref)
 }
 
 type Commit struct {

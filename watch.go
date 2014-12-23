@@ -53,12 +53,14 @@ func main() {
 	}
 
 	var (
-		etag string
-		poll = 30
+		etag   string
+		poll   = 30
+		lastId string
 	)
 
 	for {
-		events, et, p, err := loadEvents(u.Login, *org, a, etag)
+		var err error
+		events, et, p, err := pollEvents(u.Login, *org, a, etag, lastId)
 		etag = et
 
 		if p > 0 {
@@ -70,7 +72,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		for i := len(events) - 1; i > 0; i-- {
+		for i := len(events) - 1; i >= 0; i-- {
 			ev := events[i]
 			var sum string
 
@@ -80,15 +82,28 @@ func main() {
 				sum = "Unhandled event [" + ev.Type + "]"
 			}
 
-			fmt.Printf("%-20s %s\n", ev.CreatedAt.Format("Jan 2 3:04:05 PM"), sum)
+			fmt.Printf("%-20s %s\n", ev.CreatedAt.Local().Format("Jan 2 3:04:05 PM"), sum)
+			lastId = ev.Id
 		}
 
 		time.Sleep(time.Duration(poll) * time.Second)
 	}
 }
 
+func debugf(str string, params ...interface{}) {
+	if *debug {
+		if str[len(str)-1] != '\n' {
+			str += "\n"
+		}
+
+		str = "[DEBUG] " + str
+
+		log.Printf(str, params...)
+	}
+}
+
 func warnf(str string, params ...interface{}) {
-	if !*debug {
+	if *debug {
 		if str[len(str)-1] != '\n' {
 			str += "\n"
 		}
@@ -118,11 +133,10 @@ func loadUser(a *auth) (*octokit.User, error) {
 	return u, nil
 }
 
-func loadEvents(user string, org string, a *auth, etag string) ([]Event, string, int, error) {
+func pollEvents(user string, org string, a *auth, etag, lastId string) ([]Event, string, int, error) {
 	var (
-		u    string
-		auth = octokit.TokenAuth{a.Token}
-		cl   = octokit.NewClient(auth)
+		u      string
+		events = []Event{}
 	)
 
 	if org == "" {
@@ -131,10 +145,57 @@ func loadEvents(user string, org string, a *auth, etag string) ([]Event, string,
 		u = fmt.Sprintf("/users/%s/events/orgs/%s", user, org)
 	}
 
+	var (
+		ev   []Event
+		poll int
+		err  error
+		next string
+	)
+
+	for {
+		ev, etag, poll, next, err = loadEvents(u, a, etag)
+
+		if err != nil {
+			return nil, "", -1, err
+		}
+
+		idx := -1
+		for i, e := range ev {
+			if e.Id == lastId {
+				idx = i
+				break
+			}
+		}
+
+		if idx >= 0 {
+			ev = ev[0:idx]
+			next = ""
+		}
+
+		events = append(events, ev...)
+
+		if next == "" {
+			break
+		}
+
+		u = next
+	}
+
+	return events, etag, poll, nil
+}
+
+func loadEvents(u string, a *auth, etag string) ([]Event, string, int, string, error) {
+	var (
+		auth = octokit.TokenAuth{a.Token}
+		cl   = octokit.NewClient(auth)
+	)
+
+	debugf("Polling %s with etag: %s", u, etag)
+
 	req, err := cl.NewRequest(u)
 
 	if err != nil {
-		return nil, "", -1, err
+		return nil, "", -1, "", err
 	}
 
 	if etag != "" {
@@ -148,16 +209,25 @@ func loadEvents(user string, org string, a *auth, etag string) ([]Event, string,
 	etag = res.Header.Get("Etag")
 	poll, _ := strconv.Atoi(res.Header.Get("X-Poll-Interval"))
 
+	debugf("Poll Result: code=%d etag=%s poll=%d count=%d", res.StatusCode, etag, poll, len(events))
+
 	if err != nil {
 		// no new events
 		if res.StatusCode == 304 {
-			return []Event{}, etag, poll, nil
+			return []Event{}, etag, poll, "", nil
 		}
 
-		return nil, "", -1, err
+		return nil, "", -1, "", err
 	}
 
-	return events, etag, poll, nil
+	var next = ""
+	url, _ := res.MediaHeader.Relations.Rel("next", nil)
+
+	if url != nil {
+		next = url.String()
+	}
+
+	return events, etag, poll, next, nil
 }
 
 func loadFileAuth() *auth {
