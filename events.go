@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -67,11 +66,20 @@ func (e *Event) Summary() string {
 		sum = "Unhandled event [" + e.Type + "]"
 	}
 
+	const colSize = 30
+
 	width := goterm.Width()
+	lines := strings.Split(sum, "\n")
+	lines[0] = goterm.Bold(lines[0])
+	lines = indent(wrap(lines, width-colSize), colSize)
 	d := e.CreatedAt.Local().Format("Jan 2 3:04:05 PM")
 
-	lines := strings.Split(sum, "\n")
-	lines[0] = fmt.Sprintf("%-30s%s%"+strconv.Itoa(width-30-len([]rune(lines[0])))+"s", e.Repo.Name, lines[0], d)
+	if len(lines) == 1 {
+		lines = append(lines, strings.Repeat(" ", width))
+	}
+
+	lines[0] = e.Repo.Name + lines[0][len([]rune(e.Repo.Name)):]
+	lines[1] = d + lines[1][len([]rune(d)):]
 
 	return strings.Join(lines, "\n")
 }
@@ -301,4 +309,33 @@ func ellipsis(str string, lines int) string {
 	}
 
 	return strings.Join(l, "\n")
+}
+
+func wrap(lines []string, width int) []string {
+	newlines := []string{}
+
+	for _, l := range lines {
+		c := len([]rune(l))
+
+		if c <= width {
+			newlines = append(newlines, l)
+			continue
+		}
+
+		for c > width {
+			newlines = append(newlines, l[:width])
+			l = l[width:]
+			c = len([]rune(l))
+		}
+	}
+
+	return newlines
+}
+
+func indent(lines []string, num int) []string {
+	for i, l := range lines {
+		lines[i] = strings.Repeat(" ", num) + l
+	}
+
+	return lines
 }
