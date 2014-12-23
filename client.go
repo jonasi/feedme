@@ -112,7 +112,7 @@ func (c *client) getEvents(u string, etag string) ([]Event, string, int, string,
 		cl   = octokit.NewClient(auth)
 	)
 
-	debugf("Polling %s with etag: %s", u, etag)
+	debugf("Retrieving %s with etag: %s", u, etag)
 
 	req, err := cl.NewRequest(u)
 
@@ -129,17 +129,19 @@ func (c *client) getEvents(u string, etag string) ([]Event, string, int, string,
 	res, err := req.Get(&events)
 
 	var (
-		poll int
-		code int
+		poll  int
+		code  int
+		limit string
 	)
 
 	if res != nil {
 		etag = res.Header.Get("Etag")
 		poll, _ = strconv.Atoi(res.Header.Get("X-Poll-Interval"))
 		code = res.StatusCode
+		limit = res.Header.Get("X-RateLimit-Remaining") + "/" + res.Header.Get("X-RateLimit-Limit")
 	}
 
-	debugf("Poll Result: code=%d etag=%s poll=%d count=%d", code, etag, poll, len(events))
+	debugf("Response: code=%d etag=%s poll=%d count=%d limit=%s", code, etag, poll, len(events), limit)
 
 	if err != nil {
 		// no new events

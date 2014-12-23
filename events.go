@@ -92,6 +92,7 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 
 	switch e.Type {
 	case TypeCommitCommentEvent:
+		e.Payload = &CommitCommentEvent{}
 	case TypeCreateEvent:
 		e.Payload = &CreateEvent{}
 	case TypeDeleteEvent:
@@ -246,6 +247,19 @@ type ForkEvent struct {
 
 func (p *ForkEvent) Summary(ev *Event) string {
 	return fmt.Sprintf("@%s forked the repo at %s", ev.Actor.Login, p.Forkee.HTMLURL)
+}
+
+type CommitCommentEvent struct {
+	Comment CommitComment `json:"comment"`
+}
+
+func (p *CommitCommentEvent) Summary(ev *Event) string {
+	return fmt.Sprintf("@%s commented on commit %s\n\n%s\n\n%s", ev.Actor.Login, p.Comment.CommitId, ellipsis(p.Comment.Body, 5), p.Comment.HtmlUrl)
+}
+
+type CommitComment struct {
+	Comment
+	CommitId string `json:"commit_id"`
 }
 
 type Commit struct {
