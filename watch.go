@@ -6,9 +6,6 @@ import (
 	"os"
 	"path"
 	"sort"
-	"strings"
-
-	"github.com/buger/goterm"
 )
 
 var (
@@ -138,9 +135,7 @@ func main() {
 }
 
 func printEvent(ev *Event) {
-	width := goterm.Width()
-	fmt.Println(strings.Repeat("-", width))
-	fmt.Println(ev.Summary())
+	fmt.Println("\n" + ev.Summary())
 }
 
 type events []Event
