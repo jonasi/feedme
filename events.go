@@ -3,8 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/buger/goterm"
 	"github.com/octokit/go-octokit/octokit"
 )
 
@@ -48,7 +51,29 @@ type event struct {
 
 type Event struct {
 	*event
-	Payload interface{}
+	Payload EventPayload
+}
+
+type EventPayload interface {
+	Summary(*Event) string
+}
+
+func (e *Event) Summary() string {
+	var sum string
+
+	if e.Payload != nil {
+		sum = e.Payload.Summary(e)
+	} else {
+		sum = "Unhandled event [" + e.Type + "]"
+	}
+
+	width := goterm.Width()
+	d := e.CreatedAt.Local().Format("Jan 2 3:04:05 PM")
+
+	lines := strings.Split(sum, "\n")
+	lines[0] = fmt.Sprintf("%-30s%s%"+strconv.Itoa(width-30-len([]rune(lines[0])))+"s", e.Repo.Name, lines[0], d)
+
+	return strings.Join(lines, "\n")
 }
 
 type jsonEvent struct {
@@ -126,7 +151,7 @@ type IssueCommentEvent struct {
 }
 
 func (p *IssueCommentEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s commented on issue #%d", ev.Actor.Login, p.Issue.Number)
+	return fmt.Sprintf("@%s commented on issue #%d\n\n%s", ev.Actor.Login, p.Issue.Number, p.Comment.Body)
 }
 
 type IssuesEvent struct {
@@ -151,14 +176,31 @@ func (p *PullRequestEvent) Summary(ev *Event) string {
 }
 
 type PushEvent struct {
-	Head    string   `json:"head"`
-	Ref     string   `json:"ref"`
-	Size    int      `json:"size"`
-	Commits []Commit `json:"commits"`
+	Head         string   `json:"head"`
+	Ref          string   `json:"ref"`
+	Size         int      `json:"size"`
+	DistinctSize int      `json:"distinct_size"`
+	Commits      []Commit `json:"commits"`
 }
 
 func (p *PushEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s pushed %d commits to %s", ev.Actor.Login, p.Size, p.Ref)
+	c := "commits"
+	if p.Size == 1 {
+		c = "commit"
+	}
+
+	ref := strings.Replace(p.Ref, "refs/heads/", "", -1)
+	str := fmt.Sprintf("@%s pushed %d %s to %s\n", ev.Actor.Login, p.DistinctSize, c, ref)
+	i := 0
+
+	for _, c := range p.Commits {
+		if c.Distinct {
+			str += fmt.Sprintf("\n%s %s", c.Sha[:8], c.Message)
+			i++
+		}
+	}
+
+	return str
 }
 
 type PullRequestReviewCommentEvent struct {
@@ -168,7 +210,7 @@ type PullRequestReviewCommentEvent struct {
 }
 
 func (p *PullRequestReviewCommentEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s commented on pull request #%d", ev.Actor.Login, p.PullRequest.Number)
+	return fmt.Sprintf("@%s commented on pull request #%d\n\n%s", ev.Actor.Login, p.PullRequest.Number, p.Comment.Body)
 }
 
 type GollumEvent struct {

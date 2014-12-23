@@ -8,16 +8,19 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bgentry/speakeasy"
+	"github.com/buger/goterm"
 	"github.com/octokit/go-octokit/octokit"
 )
 
 var (
 	configFile = path.Join(os.Getenv("HOME"), ".config", "github-watch")
 	debug      = flag.Bool("debug", false, "")
-	org        = flag.String("org", "", "")
+	orgs       = stringsl{}
+	repos      = stringsl{}
 )
 
 type auth struct {
@@ -25,11 +28,8 @@ type auth struct {
 	Token string `json:"token"`
 }
 
-type summarizable interface {
-	Summary(*Event) string
-}
-
 func main() {
+	flag.Var(&orgs, "org", "")
 	flag.Parse()
 
 	a := loadFileAuth()
@@ -52,41 +52,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	var (
-		etag   string
-		poll   = 30
-		lastId string
-	)
+	ch := make(chan *pollMsg)
 
-	for {
-		var err error
-		events, et, p, err := pollEvents(u.Login, *org, a, etag, lastId)
-		etag = et
+	for _, org := range orgs {
+		poll(u, org, a, ch)
+	}
 
-		if p > 0 {
-			poll = p
+	for msg := range ch {
+		if msg.err != nil {
+			fmt.Printf("Events load error: %s\n", msg.err)
+			continue
 		}
 
-		if err != nil {
-			fmt.Printf("Events load error: %s\n", err)
-			os.Exit(1)
+		width := goterm.Width()
+		for i := len(msg.events) - 1; i >= 0; i-- {
+			ev := msg.events[i]
+			fmt.Println(strings.Repeat("-", width))
+			fmt.Println(ev.Summary())
 		}
-
-		for i := len(events) - 1; i >= 0; i-- {
-			ev := events[i]
-			var sum string
-
-			if s, ok := ev.Payload.(summarizable); ok {
-				sum = s.Summary(&ev)
-			} else {
-				sum = "Unhandled event [" + ev.Type + "]"
-			}
-
-			fmt.Printf("%-20s %s\n", ev.CreatedAt.Local().Format("Jan 2 3:04:05 PM"), sum)
-			lastId = ev.Id
-		}
-
-		time.Sleep(time.Duration(poll) * time.Second)
 	}
 }
 
@@ -133,6 +116,33 @@ func loadUser(a *auth) (*octokit.User, error) {
 	return u, nil
 }
 
+type pollMsg struct {
+	events []Event
+	err    error
+}
+
+func poll(u *octokit.User, org string, a *auth, send chan *pollMsg) {
+	var (
+		etag   string
+		lastId string
+		events []Event
+		err    error
+		poll   = 30
+	)
+
+	go func() {
+		events, etag, poll, err = pollEvents(u.Login, org, a, etag, lastId)
+
+		if len(events) > 0 {
+			lastId = events[0].Id
+		}
+
+		send <- &pollMsg{events, err}
+
+		time.Sleep(time.Duration(poll) * time.Second)
+	}()
+}
+
 func pollEvents(user string, org string, a *auth, etag, lastId string) ([]Event, string, int, error) {
 	var (
 		u      string
@@ -140,7 +150,7 @@ func pollEvents(user string, org string, a *auth, etag, lastId string) ([]Event,
 	)
 
 	if org == "" {
-		u = fmt.Sprintf("/users/%s/events", user)
+		u = fmt.Sprintf("/users/%s/received_events", user)
 	} else {
 		u = fmt.Sprintf("/users/%s/events/orgs/%s", user, org)
 	}
@@ -206,14 +216,22 @@ func loadEvents(u string, a *auth, etag string) ([]Event, string, int, string, e
 
 	res, err := req.Get(&events)
 
-	etag = res.Header.Get("Etag")
-	poll, _ := strconv.Atoi(res.Header.Get("X-Poll-Interval"))
+	var (
+		poll int
+		code int
+	)
 
-	debugf("Poll Result: code=%d etag=%s poll=%d count=%d", res.StatusCode, etag, poll, len(events))
+	if res != nil {
+		etag = res.Header.Get("Etag")
+		poll, _ = strconv.Atoi(res.Header.Get("X-Poll-Interval"))
+		code = res.StatusCode
+	}
+
+	debugf("Poll Result: code=%d etag=%s poll=%d count=%d", code, etag, poll, len(events))
 
 	if err != nil {
 		// no new events
-		if res.StatusCode == 304 {
+		if code == 304 {
 			return []Event{}, etag, poll, "", nil
 		}
 
