@@ -13,7 +13,7 @@ import (
 
 var (
 	configFile        string
-	defaultConfigFile = path.Join(os.Getenv("HOME"), ".config", "github-watch")
+	defaultConfigFile = path.Join(os.Getenv("HOME"), ".config", "feedme")
 	debug             bool
 	count             int
 	tail              bool

@@ -9,6 +9,10 @@ import (
 	"github.com/octokit/go-octokit/octokit"
 )
 
+const (
+	noteName = "feedme"
+)
+
 type auth struct {
 	Login string `json:"login"`
 	Token string `json:"token"`
@@ -93,7 +97,7 @@ func promptAuth() *auth {
 	}
 
 	for _, auth := range auths {
-		if auth.Note == "github-watch" {
+		if auth.Note == noteName {
 			a.Token = auth.Token
 			return &a
 		}
@@ -142,7 +146,7 @@ func createAuth(username string, pw string, code string) (*octokit.Authorization
 
 	p := octokit.AuthorizationParams{
 		Scopes: []string{"repo"},
-		Note:   "github-watch",
+		Note:   noteName,
 	}
 
 	a, res := cl.Authorizations(url).Create(p)
@@ -152,14 +156,4 @@ func createAuth(username string, pw string, code string) (*octokit.Authorization
 	}
 
 	return a, nil
-}
-
-func findToken(auths []octokit.Authorization) string {
-	for _, a := range auths {
-		if a.Note == "github-watch" {
-			return a.Token
-		}
-	}
-
-	return ""
 }
