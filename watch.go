@@ -107,7 +107,7 @@ func main() {
 		}
 
 		if msg.err != nil {
-			fmt.Printf("Events load error: %s\n", msg.err)
+			warnf("Events load error: %s\n", msg.err)
 			continue
 		}
 
