@@ -70,7 +70,6 @@ func (e *Event) Summary() string {
 
 	width := goterm.Width()
 	lines := strings.Split(sum, "\n")
-	lines[0] = goterm.Bold(lines[0])
 	lines = indent(wrap(lines, width-colSize), colSize)
 	d := e.CreatedAt.Local().Format("Jan 2 3:04:05 PM")
 
@@ -78,7 +77,7 @@ func (e *Event) Summary() string {
 		lines = append(lines, strings.Repeat(" ", width))
 	}
 
-	lines[0] = e.Repo.Name + lines[0][len([]rune(e.Repo.Name)):]
+	lines[0] = bold(e.Repo.Name) + lines[0][len([]rune(e.Repo.Name)):]
 	lines[1] = d + lines[1][len([]rune(d)):]
 
 	return strings.Join(lines, "\n")
@@ -152,7 +151,12 @@ type CreateEvent struct {
 }
 
 func (p *CreateEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s created a new %s: %s", ev.Actor.Login, p.RefType, p.Ref)
+	return fmt.Sprintf(
+		"%s created a new %s: %s",
+		username(ev.Actor),
+		p.RefType,
+		p.Ref,
+	)
 }
 
 type IssueCommentEvent struct {
@@ -162,7 +166,13 @@ type IssueCommentEvent struct {
 }
 
 func (p *IssueCommentEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s commented on issue #%d\n\n%s\n\n%s", ev.Actor.Login, p.Issue.Number, ellipsis(p.Comment.Body, 5), p.Comment.HtmlUrl)
+	return fmt.Sprintf(
+		"%s commented on %s\n\n%s\n\n%s",
+		username(ev.Actor),
+		issue(&p.Issue),
+		ellipsis(p.Comment.Body, 5),
+		underline(p.Comment.HtmlURL),
+	)
 }
 
 type IssuesEvent struct {
@@ -173,7 +183,14 @@ type IssuesEvent struct {
 }
 
 func (p *IssuesEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s %s #%d", ev.Actor.Login, p.Action, p.Issue.Number)
+	return fmt.Sprintf(
+		"%s %s %s\n\n%s\n\n%s",
+		username(ev.Actor),
+		p.Action,
+		issue(&p.Issue),
+		ellipsis(p.Issue.Body, 5),
+		underline(p.Issue.HTMLURL),
+	)
 }
 
 type PullRequestEvent struct {
@@ -183,13 +200,21 @@ type PullRequestEvent struct {
 }
 
 func (p *PullRequestEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s %s a pull request #%d", ev.Actor.Login, p.Action, p.PullRequest.Number)
+	return fmt.Sprintf(
+		"%s %s a pull request %s\n\n%s\n\n%s",
+		username(ev.Actor),
+		p.Action,
+		pr(&p.PullRequest),
+		ellipsis(p.PullRequest.Body, 5),
+		underline(p.PullRequest.HTMLURL),
+	)
 }
 
 type PushEvent struct {
 	Head         string   `json:"head"`
 	Ref          string   `json:"ref"`
 	Size         int      `json:"size"`
+	Before       string   `json:"before"`
 	DistinctSize int      `json:"distinct_size"`
 	Commits      []Commit `json:"commits"`
 }
@@ -201,14 +226,24 @@ func (p *PushEvent) Summary(ev *Event) string {
 	}
 
 	ref := strings.Replace(p.Ref, "refs/heads/", "", -1)
-	str := fmt.Sprintf("@%s pushed %d %s to %s\n", ev.Actor.Login, p.DistinctSize, c, ref)
-	i := 0
+	str := fmt.Sprintf(
+		"%s pushed %d %s to %s\n",
+		username(ev.Actor),
+		p.Size,
+		c,
+		ref,
+	)
 
 	for _, c := range p.Commits {
-		if c.Distinct {
-			str += fmt.Sprintf("\n%s %s", c.Sha[:8], c.Message)
-			i++
-		}
+		str += fmt.Sprintf("\n%s %s", c.Sha[:8], c.Message)
+	}
+
+	str += "\n\n"
+
+	if p.Size == 1 {
+		str += underline(fmt.Sprintf("https://github.com/%s/commit/%s", ev.Repo.Name, p.Commits[0].Sha))
+	} else {
+		str += underline(fmt.Sprintf("https://github.com/%s/compare/%s...%s", ev.Repo.Name, p.Before, p.Head))
 	}
 
 	return str
@@ -221,7 +256,13 @@ type PullRequestReviewCommentEvent struct {
 }
 
 func (p *PullRequestReviewCommentEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s commented on pull request #%d\n\n%s\n\n%s", ev.Actor.Login, p.PullRequest.Number, ellipsis(p.Comment.Body, 5), p.Comment.HtmlUrl)
+	return fmt.Sprintf(
+		"%s commented on pull request %s\n\n%s\n\n%s",
+		username(ev.Actor),
+		pr(&p.PullRequest),
+		ellipsis(p.Comment.Body, 5),
+		underline(p.Comment.HtmlURL),
+	)
 }
 
 type GollumEvent struct {
@@ -229,7 +270,11 @@ type GollumEvent struct {
 }
 
 func (p *GollumEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s modified %d wiki pages", ev.Actor.Login, len(p.Pages))
+	return fmt.Sprintf(
+		"%s modified %d wiki pages",
+		username(ev.Actor),
+		len(p.Pages),
+	)
 }
 
 type DeleteEvent struct {
@@ -238,7 +283,12 @@ type DeleteEvent struct {
 }
 
 func (p *DeleteEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s deleted %s %s", ev.Actor.Login, p.RefType, p.Ref)
+	return fmt.Sprintf(
+		"%s deleted %s %s",
+		username(ev.Actor),
+		p.RefType,
+		p.Ref,
+	)
 }
 
 type WatchEvent struct {
@@ -246,7 +296,10 @@ type WatchEvent struct {
 }
 
 func (p *WatchEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s is now watching", ev.Actor.Login)
+	return fmt.Sprintf(
+		"%s is watching this repo",
+		username(ev.Actor),
+	)
 }
 
 type ForkEvent struct {
@@ -254,7 +307,11 @@ type ForkEvent struct {
 }
 
 func (p *ForkEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s forked the repo at %s", ev.Actor.Login, p.Forkee.HTMLURL)
+	return fmt.Sprintf(
+		"%s forked the repo\n%s",
+		username(ev.Actor),
+		underline(p.Forkee.HTMLURL),
+	)
 }
 
 type CommitCommentEvent struct {
@@ -262,7 +319,13 @@ type CommitCommentEvent struct {
 }
 
 func (p *CommitCommentEvent) Summary(ev *Event) string {
-	return fmt.Sprintf("@%s commented on commit %s\n\n%s\n\n%s", ev.Actor.Login, p.Comment.CommitId, ellipsis(p.Comment.Body, 5), p.Comment.HtmlUrl)
+	return fmt.Sprintf(
+		"%s commented on commit %s\n\n%s\n\n%s",
+		username(ev.Actor),
+		p.Comment.CommitId,
+		ellipsis(p.Comment.Body, 5),
+		underline(p.Comment.HtmlURL),
+	)
 }
 
 type CommitComment struct {
@@ -274,7 +337,7 @@ type Commit struct {
 	Sha      string       `json:"sha"`
 	Message  string       `json:"message"`
 	Author   CommitAuthor `json:"author"`
-	Url      string       `json:"url"`
+	URL      string       `json:"url"`
 	Distinct bool         `json:"distinct"`
 }
 
@@ -285,8 +348,8 @@ type CommitAuthor struct {
 
 type Comment struct {
 	Id        int          `json:"id"`
-	Url       string       `json:"url"`
-	HtmlUrl   string       `json:"html_url"`
+	URL       string       `json:"url"`
+	HtmlURL   string       `json:"html_url"`
 	Body      string       `json:"body"`
 	User      octokit.User `json:"user"`
 	CreatedAt time.Time    `json:"created_at"`
@@ -298,7 +361,7 @@ type Page struct {
 	Title   string `json:"title"`
 	Action  string `json:"action"`
 	Sha     string `json:"sha"`
-	HtmlUrl string `json:"html_url"`
+	HtmlURL string `json:"html_url"`
 }
 
 func ellipsis(str string, lines int) string {
@@ -317,16 +380,13 @@ func wrap(lines []string, width int) []string {
 	for _, l := range lines {
 		c := len([]rune(l))
 
-		if c <= width {
-			newlines = append(newlines, l)
-			continue
-		}
-
 		for c > width {
 			newlines = append(newlines, l[:width])
 			l = l[width:]
 			c = len([]rune(l))
 		}
+
+		newlines = append(newlines, l)
 	}
 
 	return newlines
@@ -338,4 +398,24 @@ func indent(lines []string, num int) []string {
 	}
 
 	return lines
+}
+
+func username(u *octokit.User) string {
+	return bold("@" + u.Login)
+}
+
+func issue(is *octokit.Issue) string {
+	return bold(fmt.Sprintf("#%d [%s]", is.Number, is.Title))
+}
+
+func pr(pr *octokit.PullRequest) string {
+	return bold(fmt.Sprintf("#%d [%s]", pr.Number, pr.Title))
+}
+
+func bold(str string) string {
+	return fmt.Sprintf("\033[1m%s\033[0m", str)
+}
+
+func underline(str string) string {
+	return fmt.Sprintf("\033[4m%s\033[0m", str)
 }
