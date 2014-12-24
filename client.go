@@ -40,14 +40,17 @@ func (c *client) pollEvents(u string, count int, send chan *pollMsg) {
 	var (
 		etag   string
 		lastId string
-		events []Event
-		err    error
 		poll   = 30
 	)
 
 	go func() {
 		for {
-			events, etag, poll, err = c.getEventsSince(u, etag, lastId, count)
+			events, et, po, err := c.getEventsSince(u, etag, lastId, count)
+			etag = et
+
+			if po > 0 {
+				poll = po
+			}
 
 			if len(events) > 0 {
 				lastId = events[0].Id
@@ -112,7 +115,7 @@ func (c *client) getEvents(u string, etag string) ([]Event, string, int, string,
 		cl   = octokit.NewClient(auth)
 	)
 
-	debugf("Retrieving %s with etag: %s", u, etag)
+	debugf("Request: url=%s etag=%s", u, etag)
 
 	req, err := cl.NewRequest(u)
 
@@ -141,7 +144,7 @@ func (c *client) getEvents(u string, etag string) ([]Event, string, int, string,
 		limit = res.Header.Get("X-RateLimit-Remaining") + "/" + res.Header.Get("X-RateLimit-Limit")
 	}
 
-	debugf("Response: code=%d etag=%s poll=%d count=%d limit=%s", code, etag, poll, len(events), limit)
+	debugf("Response: url=%s code=%d etag=%s poll=%d count=%d limit=%s", u, code, etag, poll, len(events), limit)
 
 	if err != nil {
 		// no new events

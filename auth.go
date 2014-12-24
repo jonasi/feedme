@@ -61,6 +61,7 @@ func promptAuth() *auth {
 		code string
 	)
 
+	fmt.Println("Your Github credentials are needed to access the Github API. An API token (not your password) will be stored on the filesystem.\n")
 	fmt.Printf("Github Login: ")
 	fmt.Scanln(&a.Login)
 

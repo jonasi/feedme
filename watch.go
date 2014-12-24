@@ -9,31 +9,26 @@ import (
 )
 
 var (
-	configFile        string
-	defaultConfigFile = path.Join(os.Getenv("HOME"), ".config", "feedme")
-	debug             bool
-	count             int
-	tail              bool
-	orgs              = stringsl{}
-	users             = stringsl{}
-	userOrgs          = stringsl{}
-	repos             = stringsl{}
+	configFile string
+	debug      bool
+	count      int
+	tail       bool
+	orgs       = stringsl{}
+	users      = stringsl{}
+	userOrgs   = stringsl{}
+	repos      = stringsl{}
 )
 
 func main() {
-	flag.StringVar(&configFile, "config", "", "")
-	flag.IntVar(&count, "n", 30, "")
-	flag.BoolVar(&debug, "debug", false, "")
-	flag.BoolVar(&tail, "f", false, "")
-	flag.Var(&orgs, "org", "")
-	flag.Var(&userOrgs, "user-org", "")
-	flag.Var(&repos, "repo", "")
-	flag.Var(&users, "user", "")
+	flag.StringVar(&configFile, "config", path.Join(os.Getenv("HOME"), ".config", "feedme"), "The location of the config file where github credentials are stored")
+	flag.IntVar(&count, "n", 30, "The amount of feed items to retrieve")
+	flag.BoolVar(&debug, "debug", false, "Enable debug logging")
+	flag.BoolVar(&tail, "f", false, "Poll the API to retrieve feed events as they happen")
+	flag.Var(&orgs, "org", "Public organization feed")
+	flag.Var(&userOrgs, "user-org", "Organization feed for the logged in user")
+	flag.Var(&repos, "repo", "Repository feed")
+	flag.Var(&users, "user", "User feed")
 	flag.Parse()
-
-	if configFile == "" {
-		configFile = defaultConfigFile
-	}
 
 	a := loadFileAuth()
 
